@@ -86,9 +86,6 @@ def preprocess_data(raw_dir: str, process_dir: str, project: str, embedding_dim)
 
 
 def make_dataset(process_dir: str, ratio: str, p_n_ratio: int, p_increase_rate: int):
-    '''
-    以1:ratio的概率切分数据集
-    '''
     neg_datalist_file_path = os.path.join(process_dir, 'negative.pkl')
     pos_datalist_file_path = os.path.join(process_dir, 'positive.pkl')
 
@@ -99,44 +96,81 @@ def make_dataset(process_dir: str, ratio: str, p_n_ratio: int, p_increase_rate: 
     neg_datalist = pd.read_pickle(neg_datalist_file_path)
     pos_datalist = pd.read_pickle(pos_datalist_file_path)
 
-    # 读完后 第一件事是先把验证集和测试集合先切出来
+    mode = cf.getint('sample', 'mode')
+    if mode == 0:
 
-    ratios = [int(r) for r in ratio.split(':')]
-    data_num = len(pos_datalist)
+        # 先增加正样本量
+        pos_inc = pos_datalist.sample(frac=p_increase_rate)
+        pos_datalist = pos_datalist.append(pos_inc)
 
-    train_split = int(ratios[0] / sum(ratios) * data_num)
-    val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
+        # 然后把正样本装进三个数据集
+        ratios = [int(r) for r in ratio.split(':')]
+        data_num = len(pos_datalist)
 
-    train = pos_datalist.iloc[:train_split]
-    dev = pos_datalist.iloc[train_split:val_split]
-    test = pos_datalist.iloc[val_split:]
+        train_split = int(ratios[0] / sum(ratios) * data_num)
+        val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
 
-    pos_inc = pos_datalist.sample(frac=p_increase_rate)
-    train = train.append(pos_inc)
-    num_pos = len(train)
-    num_neg = num_pos * p_n_ratio
+        train = pos_datalist.iloc[:train_split]
+        dev = pos_datalist.iloc[train_split:val_split]
+        test = pos_datalist.iloc[val_split:]
 
-    data_num = len(neg_datalist)
+        # 然后切分负样本
+        data_num = data_num * p_n_ratio
+        neg_datalist = neg_datalist.sample(n=data_num if data_num < len(neg_datalist) else len(neg_datalist))
+        train_split = int(ratios[0] / sum(ratios) * data_num)
+        val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
 
-    train_split = int(ratios[0] / sum(ratios) * data_num)
-    val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
+        train = train.append(neg_datalist.iloc[:train_split])
+        dev = dev.append(neg_datalist.iloc[train_split:val_split])
+        test = test.append(neg_datalist.iloc[val_split:])
 
-    temp_train = neg_datalist.iloc[:train_split]
-    temp_train_size = len(temp_train)
-    temp_train = temp_train.sample(n=num_neg if num_neg < temp_train_size else temp_train_size)
-    train = train.append(temp_train)
-    dev = dev.append(neg_datalist.iloc[train_split:val_split])
-    test = test.append(neg_datalist.iloc[val_split:])
+        train = train.sample(frac=1)
+        dev = dev.sample(frac=1)
+        test = test.sample(frac=1)
 
-    train = train.sample(frac=1)
-    dev = dev.sample(frac=1)
-    test = test.sample(frac=1)
+        train_dataset = MyDataset(train)
+        dev_dataset = MyDataset(dev)
+        test_dataset = MyDataset(test)
 
-    train_dataset = MyDataset(train)
-    dev_dataset = MyDataset(dev)
-    test_dataset = MyDataset(test)
+        return train_dataset, dev_dataset, test_dataset
 
-    return train_dataset, dev_dataset, test_dataset
+    else:
+        ratios = [int(r) for r in ratio.split(':')]
+        data_num = len(pos_datalist)
+
+        train_split = int(ratios[0] / sum(ratios) * data_num)
+        val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
+
+        train = pos_datalist.iloc[:train_split]
+        dev = pos_datalist.iloc[train_split:val_split]
+        test = pos_datalist.iloc[val_split:]
+
+        pos_inc = pos_datalist.sample(frac=p_increase_rate)
+        train = train.append(pos_inc)
+        num_pos = len(train)
+        num_neg = num_pos * p_n_ratio
+
+        data_num = len(neg_datalist)
+
+        train_split = int(ratios[0] / sum(ratios) * data_num)
+        val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
+
+        temp_train = neg_datalist.iloc[:train_split]
+        temp_train_size = len(temp_train)
+        temp_train = temp_train.sample(n=num_neg if num_neg < temp_train_size else temp_train_size)
+        train = train.append(temp_train)
+        dev = dev.append(neg_datalist.iloc[train_split:val_split])
+        test = test.append(neg_datalist.iloc[val_split:])
+
+        train = train.sample(frac=1)
+        dev = dev.sample(frac=1)
+        test = test.sample(frac=1)
+
+        train_dataset = MyDataset(train)
+        dev_dataset = MyDataset(dev)
+        test_dataset = MyDataset(test)
+
+        return train_dataset, dev_dataset, test_dataset
 
 
 # 读取配置
@@ -168,5 +202,3 @@ model, record_file_path = train(train_dataset, dev_dataset)
 
 print('step5: 开始测试...')
 test(model, test_dataset, record_file_path)
-
-

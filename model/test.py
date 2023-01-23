@@ -29,8 +29,13 @@ def test(model, test_dataset, record_file_path: str):
     with torch.no_grad():
         for i, (x, y) in enumerate(test_loader):
             y_hat = model(x)
-            y_hat_trans = y_hat.argmax(1)
-            y_trans = y.argmax(1)
+
+            y_trans = y.reshape(y.shape[0], )
+            y_hat_trans = []
+            for i in range(y_hat.shape[0]):
+                y_hat_trans.append(1 if y_hat[0].item() > 0.5 else 0)
+            y_hat_trans = torch.tensor(y_hat_trans)
+
             y_hat_total = torch.cat([y_hat_total, y_hat_trans])
             y_total = torch.cat([y_total, y_trans])
 

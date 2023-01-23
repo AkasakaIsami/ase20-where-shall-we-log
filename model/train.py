@@ -48,8 +48,8 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
     record_file.write(f"    -数据集切分比：{cf.get('data', 'ratio')}\n")
 
     record_file.write(f"    -训练集正负样本数据量比： 1:{cf.getint('sample', 'PosNegRatio')}\n")
-    record_file.write(f"    -训练集长度：{train_dataset.__len__}\n")
-    record_file.write(f"    -验证集长度：{dev_dataset.__len__}\n")
+    record_file.write(f"    -训练集长度：{len(train_dataset)}\n")
+    record_file.write(f"    -验证集长度：{len(dev_dataset)}\n")
 
     record_file.write(f"模型配置如下：\n")
     record_file.write(f"    - EPOCHS：{EPOCH}\n")
@@ -58,7 +58,6 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
     record_file.write(f"    - 词嵌入维度：{EMBEDDING_DIM}\n")
     record_file.write(f"    - 隐藏层维度：{HIDDEN_DIM}\n")
     record_file.write(f"    - dropout率：{DROP}\n")
-
 
     # 正式开始训练！
     train_loader = DataLoader(dataset=train_dataset, collate_fn=my_collate, batch_size=BATCH_SIZE, shuffle=True)
@@ -119,8 +118,12 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
 
                 total_val_loss += loss.item()
 
-                y_hat_trans = y_hat.argmax(1)
-                y_trans = y.argmax(1)
+                y_trans = y.reshape(y.shape[0], )
+                y_hat_trans = []
+                for i in range(y_hat.shape[0]):
+                    y_hat_trans.append(1 if y_hat[0].item() > 0.5 else 0)
+                y_hat_trans = torch.tensor(y_hat_trans)
+
                 y_hat_total = torch.cat([y_hat_total, y_hat_trans])
                 y_total = torch.cat([y_total, y_trans])
 

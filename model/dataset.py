@@ -11,7 +11,8 @@ class MyDataset(Dataset):
     def __getitem__(self, index: int):
         x = self.datas.iloc[index]['data']
         y = self.datas.iloc[index]['label']
-        return x, y
+        id = self.datas.iloc[index]['id']
+        return x, y, id
 
     def __len__(self):
         return len(self.datas)
