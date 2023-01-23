@@ -29,6 +29,7 @@ public class MethodVisitor extends VoidVisitorAdapter<String> {
 
     @Override
     public void visit(MethodDeclaration node, String fileName) {
+        trace = new StringBuilder();
         if (node != null && node.isMethodDeclaration()) {
             System.out.println("遍历函数" + node.getNameAsString() + "中");
             MethodDeclaration methodDeclaration = node.asMethodDeclaration();
@@ -70,8 +71,14 @@ public class MethodVisitor extends VoidVisitorAdapter<String> {
 
             if (LogUtil.isLogStatement(code)) {
                 //  如果是日志语句 那就把父亲节点移到posmap里 然后跳过自己
-                posSeq.put(preKey, negSeq.get(preKey));
-                negSeq.remove(preKey);
+
+                // 要先判断pos里有没有prekey
+                if (!posSeq.containsKey(preKey)) {
+                    if (preKey == null)
+                        System.out.println();
+                    posSeq.put(preKey, negSeq.get(preKey));
+                    negSeq.remove(preKey);
+                }
                 return preKey;
             }
             int line = expression.getBegin().isPresent() ? expression.getBegin().get().line : -1;
@@ -102,6 +109,7 @@ public class MethodVisitor extends VoidVisitorAdapter<String> {
                 }
             }
             // 还没完！因为每个block后都需要加一个标注块结束的控制节点！
+            line = whileStmt.getEnd().isPresent() ? whileStmt.getEnd().get().line : line;
             tempKey = this.key + "@" + line + "@endWhile";
             type = "endWhile";
             trace.append(type).append(' ');
@@ -126,6 +134,8 @@ public class MethodVisitor extends VoidVisitorAdapter<String> {
                 }
             }
             // 还没完！因为每个block后都需要加一个标注块结束的控制节点！
+
+            line = forStmt.getEnd().isPresent() ? forStmt.getEnd().get().line : line;
             tempKey = this.key + "@" + line + "@endFor";
             type = "endFor";
             trace.append(type).append(' ');
@@ -150,6 +160,7 @@ public class MethodVisitor extends VoidVisitorAdapter<String> {
                 }
             }
             // 还没完！因为每个block后都需要加一个标注块结束的控制节点！
+            line = foreachStmt.getEnd().isPresent() ? foreachStmt.getEnd().get().line : line;
             tempKey = this.key + "@" + line + "@endForeach";
             type = "endForeach";
             trace.append(type).append(' ');
@@ -228,6 +239,7 @@ public class MethodVisitor extends VoidVisitorAdapter<String> {
                         }
                     }
                     // 还没完 对于ifStmt 最后要加一个endif块
+                    line = ifStmt.getElseStmt().get().getEnd().isPresent() ? ifStmt.getElseStmt().get().getEnd().get().line : line;
                     tempKey = this.key + "@" + line + "@endIf";
                     type = "endIf";
                     trace.append(type).append(' ');
@@ -240,12 +252,15 @@ public class MethodVisitor extends VoidVisitorAdapter<String> {
                 // 有else就接着遍历else 没else我们就用endif封上
                 // else结束也要封
                 // 还没完 对于ifStmt 最后要加一个endif块
+                line = ifStmt.getEnd().isPresent() ? ifStmt.getEnd().get().line : line;
                 tempKey = this.key + "@" + line + "@endIf";
                 type = "endIf";
                 trace.append(type).append(' ');
                 negSeq.put(tempKey, trace.toString());
                 return tempKey;
             }
+
+            return tempKey;
 
         } else if (node.isSwitchStmt()) {
             SwitchStmt switchStmt = ((SwitchStmt) node).asSwitchStmt();
@@ -266,7 +281,7 @@ public class MethodVisitor extends VoidVisitorAdapter<String> {
             }
 
             // 没完！ 要接一个endSwtich
-            line = switchStmt.getEnd().get().line + 1;
+            line = switchStmt.getEnd().isPresent() ? switchStmt.getEnd().get().line : line;
             tempKey = this.key + "@" + line;
             type = "endSwtich";
             trace.append(type).append(' ');
@@ -311,8 +326,13 @@ public class MethodVisitor extends VoidVisitorAdapter<String> {
             // 接下来处理一些简单语句
             // ————————————————————————————————————————————————————————————————————————————————————————————
         } else if (node.isSwitchEntryStmt()) {
-            // TODO
-
+            SwitchEntryStmt switchEntryStmt = ((SwitchEntryStmt) node).asSwitchEntryStmt();
+            int line = switchEntryStmt.getBegin().isPresent() ? switchEntryStmt.getBegin().get().line : -1;
+            String tempKey = this.key + "@" + line;
+            String type = switchEntryStmt.getMetaModel().getTypeName();
+            trace.append(type).append(' ');
+            negSeq.put(tempKey, trace.toString());
+            return tempKey;
         } else if (node.isBreakStmt()) {
             BreakStmt breakStmt = ((BreakStmt) node).asBreakStmt();
             int line = breakStmt.getBegin().isPresent() ? breakStmt.getBegin().get().line : -1;
@@ -379,12 +399,72 @@ public class MethodVisitor extends VoidVisitorAdapter<String> {
             return tempKey;
 
             // 最后我们来处理trycatch
+        } else if (node.isThrowStmt()) {
+            ThrowStmt throwStmtStmt = ((ThrowStmt) node).asThrowStmt();
+            int line = throwStmtStmt.getBegin().isPresent() ? throwStmtStmt.getBegin().get().line : -1;
+            String tempKey = this.key + "@" + line;
+            String type = throwStmtStmt.getMetaModel().getTypeName();
+            trace.append(type).append(' ');
+            negSeq.put(tempKey, trace.toString());
+            return tempKey;
+
         } else if (node.isTryStmt()) {
-            
+            TryStmt tryStmt = ((TryStmt) node).asTryStmt();
+            int line = tryStmt.getBegin().isPresent() ? tryStmt.getBegin().get().line : -1;
+            String tempKey = this.key + "@" + line;
+            String type = tryStmt.getMetaModel().getTypeName();
+            trace.append(type).append(' ');
+            negSeq.put(tempKey, trace.toString());
+
+            BlockStmt tryBlock = tryStmt.getTryBlock();
+            if (!tryBlock.getStatements().isEmpty())
+                tempKey = dfs(tryBlock, tempKey);
+
+            int finalLine = line;
+            NodeList<CatchClause> catchClauses = tryStmt.getCatchClauses();
+            if (!catchClauses.isEmpty()) {
+                for (CatchClause catchClause : catchClauses) {
+                    line = catchClause.getBegin().isPresent() ? catchClause.getBegin().get().line : -1;
+                    tempKey = this.key + "@" + line;
+                    type = catchClause.getMetaModel().getTypeName();
+                    trace.append(type).append(' ');
+                    negSeq.put(tempKey, trace.toString());
+
+
+                    BlockStmt catchBody = catchClause.getBody();
+                    if (!catchBody.getStatements().isEmpty())
+                        tempKey = dfs(catchBody, tempKey);
+                    finalLine = catchClause.getEnd().get().line;
+
+                }
+            }
+
+            Optional<BlockStmt> finallyBlock = tryStmt.getFinallyBlock();
+            if (finallyBlock.isPresent()) {
+                line = tryStmt.getFinallyBlock().get().getBegin().isPresent() ? tryStmt.getFinallyBlock().get().getBegin().get().line : -1;
+                tempKey = this.key + "@" + line;
+                type = "finally";
+                trace.append(type).append(' ');
+                negSeq.put(tempKey, trace.toString());
+
+                if (!finallyBlock.get().getStatements().isEmpty())
+                    dfs(finallyBlock.get(), tempKey);
+
+
+                finalLine = finallyBlock.get().getEnd().get().line;
+            }
+
+            // 最后接一个endtry就好
+            tempKey = this.key + "@" + finalLine + "@endTry";
+            type = "endTry";
+            trace.append(type).append(' ');
+            negSeq.put(tempKey, trace.toString());
+
+            return tempKey;
+
         }
-
-
         return null;
+
     }
 
 

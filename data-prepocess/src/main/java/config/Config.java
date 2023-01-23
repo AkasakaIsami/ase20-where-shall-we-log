@@ -7,7 +7,7 @@ package config;
  * @since 2023/1/23 5:54 PM
  */
 public class Config {
-    public static final String projectName = "zookeeperdemo";
+    public static final String projectName = "kafkademo";
 
     // 存放源码的路径
     public static final String rootDir = "/Users/akasakaisami/data/primary/" + projectName + "/";
