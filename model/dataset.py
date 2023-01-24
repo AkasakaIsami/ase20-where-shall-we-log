@@ -16,3 +16,7 @@ class MyDataset(Dataset):
 
     def __len__(self):
         return len(self.datas)
+
+    def get_labels(self, ):
+        return self.datas['label'].tolist()
+

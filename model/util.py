@@ -8,12 +8,14 @@ from torch.nn.utils.rnn import pad_sequence
 def my_collate(batch):
     x = []
     y = []
+    ids = []
     for data in batch:
         x.append(data[0])
         y.append([data[1]])
+        ids.append(data[2])
     x = pad_sequence(x, batch_first=True)
     y = torch.tensor(y).float()
-    return x, y
+    return x, y, ids
 
 
 def float_to_percent(num: float) -> str:

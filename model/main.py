@@ -96,109 +96,63 @@ def make_dataset(process_dir: str, ratio: str, p_n_ratio: int, p_increase_rate: 
     neg_datalist = pd.read_pickle(neg_datalist_file_path)
     pos_datalist = pd.read_pickle(pos_datalist_file_path)
 
-    mode = cf.getint('sample', 'mode')
-    if mode == 0:
+    ratios = [int(r) for r in ratio.split(':')]
+    data_num = len(pos_datalist)
 
-        # 先增加正样本量
-        pos_inc = pos_datalist.sample(frac=p_increase_rate)
-        pos_datalist = pos_datalist.append(pos_inc)
+    train_split = int(ratios[0] / sum(ratios) * data_num)
+    val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
 
-        # 然后把正样本装进三个数据集
-        ratios = [int(r) for r in ratio.split(':')]
-        data_num = len(pos_datalist)
+    train = pos_datalist.iloc[:train_split]
+    dev = pos_datalist.iloc[train_split:val_split]
+    test = pos_datalist.iloc[val_split:]
 
-        train_split = int(ratios[0] / sum(ratios) * data_num)
-        val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
+    data_num = data_num * p_n_ratio
+    neg_datalist = neg_datalist.sample(n=data_num if data_num < len(neg_datalist) else len(neg_datalist))
+    train_split = int(ratios[0] / sum(ratios) * data_num)
+    val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
 
-        train = pos_datalist.iloc[:train_split]
-        dev = pos_datalist.iloc[train_split:val_split]
-        test = pos_datalist.iloc[val_split:]
+    train = train.append(neg_datalist.iloc[:train_split])
+    dev = dev.append(neg_datalist.iloc[train_split:val_split])
+    test = test.append(neg_datalist.iloc[val_split:])
 
-        # 然后切分负样本
-        data_num = data_num * p_n_ratio
-        neg_datalist = neg_datalist.sample(n=data_num if data_num < len(neg_datalist) else len(neg_datalist))
-        train_split = int(ratios[0] / sum(ratios) * data_num)
-        val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
+    train = train.sample(frac=1)
+    dev = dev.sample(frac=1)
+    test = test.sample(frac=1)
 
-        train = train.append(neg_datalist.iloc[:train_split])
-        dev = dev.append(neg_datalist.iloc[train_split:val_split])
-        test = test.append(neg_datalist.iloc[val_split:])
+    train_dataset = MyDataset(train)
+    dev_dataset = MyDataset(dev)
+    test_dataset = MyDataset(test)
 
-        train = train.sample(frac=1)
-        dev = dev.sample(frac=1)
-        test = test.sample(frac=1)
-
-        train_dataset = MyDataset(train)
-        dev_dataset = MyDataset(dev)
-        test_dataset = MyDataset(test)
-
-        return train_dataset, dev_dataset, test_dataset
-
-    else:
-        ratios = [int(r) for r in ratio.split(':')]
-        data_num = len(pos_datalist)
-
-        train_split = int(ratios[0] / sum(ratios) * data_num)
-        val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
-
-        train = pos_datalist.iloc[:train_split]
-        dev = pos_datalist.iloc[train_split:val_split]
-        test = pos_datalist.iloc[val_split:]
-
-        pos_inc = pos_datalist.sample(frac=p_increase_rate)
-        train = train.append(pos_inc)
-        num_pos = len(train)
-        num_neg = num_pos * p_n_ratio
-
-        data_num = len(neg_datalist)
-
-        train_split = int(ratios[0] / sum(ratios) * data_num)
-        val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
-
-        temp_train = neg_datalist.iloc[:train_split]
-        temp_train_size = len(temp_train)
-        temp_train = temp_train.sample(n=num_neg if num_neg < temp_train_size else temp_train_size)
-        train = train.append(temp_train)
-        dev = dev.append(neg_datalist.iloc[train_split:val_split])
-        test = test.append(neg_datalist.iloc[val_split:])
-
-        train = train.sample(frac=1)
-        dev = dev.sample(frac=1)
-        test = test.sample(frac=1)
-
-        train_dataset = MyDataset(train)
-        dev_dataset = MyDataset(dev)
-        test_dataset = MyDataset(test)
-
-        return train_dataset, dev_dataset, test_dataset
+    return train_dataset, dev_dataset, test_dataset
 
 
-# 读取配置
-cf = configparser.ConfigParser()
-cf.read('config.ini')
+if __name__ == '__main__':
+    # 读取配置
+    cf = configparser.ConfigParser()
+    cf.read('config.ini')
 
-project = cf.get('data', 'projectName')
-ratio = cf.get('data', 'ratio')
-p_n_ratio = cf.getint('sample', 'PosNegRatio')
-p_increase_rate = cf.getfloat('sample', 'PosIncreaseRate')
+    project = cf.get('data', 'projectName')
+    ratio = cf.get('data', 'ratio')
+    p_n_ratio = cf.getint('sample', 'PosNegRatio')
+    p_increase_rate = cf.getfloat('sample', 'PosIncreaseRate')
 
-raw_dir = os.path.join(cf.get('data', 'dataDir'), project, 'raw')
-process_dir = os.path.join(cf.get('data', 'dataDir'), project, 'process')
+    raw_dir = os.path.join(cf.get('data', 'dataDir'), project, 'raw')
+    process_dir = os.path.join(cf.get('data', 'dataDir'), project, 'process')
 
-embedding_dim = cf.getint('embedding', 'dim')
+    embedding_dim = cf.getint('embedding', 'dim')
 
-print(f'开始数据预处理（目标项目为{project}）...')
-print('step1: 词嵌入训练...')
-dictionary_and_embedding(raw_dir, project, embedding_dim)
+    print(f'开始数据预处理（目标项目为{project}）...')
+    print('step1: 词嵌入训练...')
+    dictionary_and_embedding(raw_dir, project, embedding_dim)
 
-print('step2: 处理原始数据...')
-preprocess_data(raw_dir, process_dir, project, embedding_dim)
+    print('step2: 处理原始数据...')
+    preprocess_data(raw_dir, process_dir, project, embedding_dim)
 
-print('step3: 制作数据集...')
-train_dataset, dev_dataset, test_dataset = make_dataset(process_dir, ratio, p_n_ratio, p_increase_rate)
+    print('step3: 制作数据集...')
+    train_dataset, dev_dataset, test_dataset = make_dataset(process_dir, ratio, p_n_ratio, p_increase_rate)
 
-print('step4: 开始训练...')
-model, record_file_path = train(train_dataset, dev_dataset)
+    print('step4: 开始训练...')
+    model, record_file_path = train(train_dataset, dev_dataset)
 
-print('step5: 开始测试...')
-test(model, test_dataset, record_file_path)
+    print('step5: 开始测试...')
+    test(model, test_dataset, record_file_path)

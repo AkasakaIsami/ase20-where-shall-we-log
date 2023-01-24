@@ -1,5 +1,6 @@
 import configparser
 import os
+import random
 from datetime import datetime
 import time
 
@@ -8,6 +9,7 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_s
     confusion_matrix
 from torch.utils.data import DataLoader
 from torchinfo import summary
+from torchsampler import ImbalancedDatasetSampler
 
 from dataset import MyDataset
 from model import Classifier
@@ -23,7 +25,7 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
     cf = configparser.ConfigParser()
     cf.read('config.ini')
 
-    USE_GPU = cf.getboolean('environment', 'useGPU') and torch.cuda.is_available()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     EPOCH = cf.getint('train', 'epoch')
     BATCH_SIZE = cf.getint('train', 'batchSize')
@@ -33,7 +35,7 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
     DROP = cf.getfloat('train', 'dropout')
 
     # 要记录训练信息
-    record_file_path = os.path.join(cf.get('data', 'dataDir'), cf.get('data', 'projectName'), 'record_file')
+    record_file_path = os.path.join(cf.get('data', 'dataDir'), cf.get('data', 'projectName'), 'result')
     if not os.path.exists(record_file_path):
         os.makedirs(record_file_path)
 
@@ -60,24 +62,30 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
     record_file.write(f"    - dropout率：{DROP}\n")
 
     # 正式开始训练！
-    train_loader = DataLoader(dataset=train_dataset, collate_fn=my_collate, batch_size=BATCH_SIZE, shuffle=True)
-    dev_loader = DataLoader(dataset=dev_dataset, collate_fn=my_collate, batch_size=BATCH_SIZE, shuffle=True)
+    train_loader = DataLoader(dataset=train_dataset,
+                              collate_fn=my_collate,
+                              sampler=ImbalancedDatasetSampler(train_dataset),
+                              batch_size=BATCH_SIZE,
+                              shuffle=False)
+
+    dev_loader = DataLoader(dataset=dev_dataset,
+                            collate_fn=my_collate,
+                            sampler=ImbalancedDatasetSampler(dev_dataset),
+                            batch_size=BATCH_SIZE,
+                            shuffle=False)
 
     model = Classifier(input_size=EMBEDDING_DIM,
                        hidden_size=HIDDEN_DIM,
                        output_size=1,
-                       dropout=DROP)
+                       dropout=DROP).to(device)
 
     parameters = model.parameters()
     optimizer = torch.optim.Adam(parameters, lr=LR)
     loss_function = torch.nn.MSELoss()
 
-    if USE_GPU:
-        model = model.cuda()
-
     # 用于寻找效果最好的模型
     best_acc = 0.0
-    best_model = model
+    best_model = model.to(device)
 
     record_file.write(f"模型结构如下：\n")
     record_file.write(str(summary(model)) + '\n')
@@ -90,10 +98,10 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
         print(f'------------第 {epoch + 1} 轮训练开始------------')
         record_file.write(f'------------第 {epoch + 1} 轮训练开始------------\n')
         model.train()
-        for i, (x, y) in enumerate(train_loader):
+        for i, (x, y, ids) in enumerate(train_loader):
             model.zero_grad()
-            y_hat = model(x)
-            loss = loss_function(y_hat, y)
+            y_hat = model(x.to(device))
+            loss = loss_function(y_hat, y.to(device))
 
             optimizer.zero_grad()
             loss.backward()
@@ -110,11 +118,14 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
         y_hat_total = torch.randn(0)
         y_total = torch.randn(0)
 
+        TP = []
+        TN = []
+        FP = []
         model.eval()
         with torch.no_grad():
-            for i, (x, y) in enumerate(dev_loader):
-                y_hat = model(x)
-                loss = loss_function(y_hat, y)
+            for i, (x, y, ids) in enumerate(dev_loader):
+                y_hat = model(x.to(device))
+                loss = loss_function(y_hat, y.to(device))
 
                 total_val_loss += loss.item()
 
@@ -126,6 +137,20 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
 
                 y_hat_total = torch.cat([y_hat_total, y_hat_trans])
                 y_total = torch.cat([y_total, y_trans])
+
+                for j in range(y_hat.shape[0]):
+                    statement_id = ids[j]
+                    fac = y[j].item()
+                    pre = y_hat[j].item()
+
+                    if fac == pre:
+                        if fac == 1:
+                            TP.append(statement_id)
+                    else:
+                        if fac == 1:
+                            TN.append(statement_id)
+                        else:
+                            FP.append(statement_id)
 
         print(f"验证集整体Loss: {total_val_loss}")
         record_file.write(f"验证集整体Loss: {total_val_loss}\n")
@@ -150,6 +175,28 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
         record_file.write(f"验证集 recall_score: {float_to_percent(rc)}\n")
         record_file.write(f"验证集 f1_score: {float_to_percent(f1)}\n")
         record_file.write(f"验证集 混淆矩阵:\n {c}\n")
+
+        # 对于TP（猜对了）、TN（没猜出来）、FP（猜错了） 分别取20条写进文件
+        index = 0
+        record_file.write("预测正确的的TN有：\n")
+        TP = random.sample(TP, 20 if len(TP) > 20 else len(TP))
+        for item in TP:
+            record_file.write(f'    -{index}. {item}\n')
+            index += 1
+
+        index = 0
+        record_file.write("实际是正样本，却被预测为负样本的TN有：\n")
+        TN = random.sample(TN, 20 if len(TN) > 20 else len(TN))
+        for item in TN:
+            record_file.write(f'    -{index}. {item}\n')
+            index += 1
+
+        index = 0
+        record_file.write("实际是负样本，被预测为正样本的FP有：\n")
+        FP = random.sample(FP, 20 if len(FP) > 20 else len(FP))
+        for item in FP:
+            record_file.write(f'    -{index}. {item}\n')
+            index += 1
 
         # 主要看balanced_accuracy_score
         if balanced_acc > best_acc:
