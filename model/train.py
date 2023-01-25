@@ -108,7 +108,7 @@ def train(train_dataset: MyDataset, dev_dataset: MyDataset):
             optimizer.step()
 
             total_train_step = total_train_step + 1
-            if total_train_step % 1 == 0:
+            if total_train_step % 10 == 0:
                 print(f"训练次数: {total_train_step}, Loss: {loss.item()}")
 
             if total_train_step % 10 == 0:

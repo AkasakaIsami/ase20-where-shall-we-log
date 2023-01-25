@@ -13,14 +13,17 @@ class Classifier(nn.Module):
         self.num_directions = 1  # 单向LSTM
         self.dropout = dropout
 
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
         self.lstm = nn.LSTM(self.input_size, self.hidden_size, self.num_layers, batch_first=True, dropout=self.dropout)
         self.linear = nn.Linear(self.hidden_size, self.output_size)
 
     def forward(self, x):
         batch_size, seq_len = x.shape[0], x.shape[1]
 
-        h_0 = torch.randn(self.num_directions * self.num_layers, batch_size, self.hidden_size)
-        c_0 = torch.randn(self.num_directions * self.num_layers, batch_size, self.hidden_size)
+        h_0 = torch.randn(self.num_directions * self.num_layers, batch_size, self.hidden_size).to(self.device)
+        c_0 = torch.randn(self.num_directions * self.num_layers, batch_size, self.hidden_size).to(self.device)
 
         output, _ = self.lstm(x, (h_0, c_0))
         pred = self.linear(output)

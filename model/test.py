@@ -16,6 +16,8 @@ warnings.filterwarnings("ignore")
 
 
 def test(model, test_dataset, record_file_path: str):
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
     record_file = open(os.path.join(record_file_path), 'a')
 
     cf = configparser.ConfigParser()
@@ -37,7 +39,7 @@ def test(model, test_dataset, record_file_path: str):
     model.eval()
     with torch.no_grad():
         for i, (x, y, ids) in enumerate(test_loader):
-            y_hat = model(x)
+            y_hat = model(x.to(device))
 
             y_trans = y.reshape(y.shape[0], )
             y_hat_trans = []

@@ -106,7 +106,7 @@ def make_dataset(process_dir: str, ratio: str, p_n_ratio: int, p_increase_rate: 
     dev = pos_datalist.iloc[train_split:val_split]
     test = pos_datalist.iloc[val_split:]
 
-    data_num = data_num * p_n_ratio
+    data_num =  len(neg_datalist)
     neg_datalist = neg_datalist.sample(n=data_num if data_num < len(neg_datalist) else len(neg_datalist))
     train_split = int(ratios[0] / sum(ratios) * data_num)
     val_split = train_split + int(ratios[1] / sum(ratios) * data_num)
