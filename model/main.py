@@ -60,6 +60,10 @@ def preprocess_data(raw_dir: str, process_dir: str, project: str, embedding_dim)
         for line in file:
             id = line.split(' ', 1)[0]
             words = line.split(' ')[1:]
+            class_name = id.split('@',1)[0]
+            if class_name.endswith('Test.java'):
+                continue
+
             vectors = torch.randn(0, embedding_dim)
             for word in words:
                 vector = word2vector(word)
@@ -71,6 +75,10 @@ def preprocess_data(raw_dir: str, process_dir: str, project: str, embedding_dim)
         for line in file:
             id = line.split(' ', 1)[0]
             words = line.split(' ')[1:]
+            class_name = id.split('@', 1)[0]
+            if class_name.endswith('Test.java'):
+                continue
+
             vectors = torch.randn(0, embedding_dim)
             for word in words:
                 vector = word2vector(word)
